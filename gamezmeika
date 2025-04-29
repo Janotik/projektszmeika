@@ -1,0 +1,141 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Windows.Forms;
+using SnakeAuthGame.Models;
+
+namespace SnakeAuthGame
+{
+    public partial class GameForm : Form
+    {
+        private User currentUser;
+        private Timer gameTimer = new Timer();
+        private List<Point> snake = new List<Point>();
+        private Point food;
+        private string direction = "right";
+        private int score = 0;
+        private int gridSize = 20;
+        private Random rand = new Random();
+        private DateTime startTime;
+
+        public GameForm(User user)
+        {
+            InitializeComponent();
+            this.DoubleBuffered = true;
+            this.Width = 420;
+            this.Height = 460;
+            this.Text = "Snake Game";
+            currentUser = user;
+
+            gameTimer.Interval = 100;
+            gameTimer.Tick += Update;
+
+            this.Paint += Draw;
+            this.KeyDown += ChangeDirection;
+
+            StartGame();
+        }
+
+        private void StartGame()
+        {
+            snake.Clear();
+            snake.Add(new Point(5, 5));
+            direction = "right";
+            score = 0;
+            startTime = DateTime.Now;
+            GenerateFood();
+            gameTimer.Start();
+        }
+
+        private void GenerateFood()
+        {
+            food = new Point(rand.Next(0, 20), rand.Next(0, 20));
+        }
+
+        private void Update(object sender, EventArgs e)
+        {
+            Point head = snake[0];
+            Point newHead = head;
+
+            switch (direction)
+            {
+                case "up": newHead.Y -= 1; break;
+                case "down": newHead.Y += 1; break;
+                case "left": newHead.X -= 1; break;
+                case "right": newHead.X += 1; break;
+            }
+
+            if (newHead.X < 0 || newHead.Y < 0 || newHead.X >= 20 || newHead.Y >= 20 || snake.Contains(newHead))
+            {
+                gameTimer.Stop();
+                SaveGame();
+                MessageBox.Show($"Игра окончена! Ваш счёт: {score}");
+                this.Close();
+                return;
+            }
+
+            snake.Insert(0, newHead);
+            if (newHead == food)
+            {
+                score++;
+                GenerateFood();
+            }
+            else
+            {
+                snake.RemoveAt(snake.Count - 1);
+            }
+
+            this.Invalidate();
+        }
+
+        private void Draw(object sender, PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(Color.Black);
+
+            g.FillRectangle(Brushes.Red, food.X * gridSize, food.Y * gridSize, gridSize, gridSize);
+
+           
+            foreach (var segment in snake)
+            {
+                g.FillRectangle(Brushes.Green, segment.X * gridSize, segment.Y * gridSize, gridSize, gridSize);
+            }
+
+           
+            g.DrawString($"Счёт: {score}", new Font("Arial", 12), Brushes.White, new PointF(10, 400));
+        }
+
+        private void ChangeDirection(object sender, KeyEventArgs e)
+        {
+            switch (e.KeyCode)
+            {
+                case Keys.Up:
+                    if (direction != "down") direction = "up";
+                    break;
+                case Keys.Down:
+                    if (direction != "up") direction = "down";
+                    break;
+                case Keys.Left:
+                    if (direction != "right") direction = "left";
+                    break;
+                case Keys.Right:
+                    if (direction != "left") direction = "right";
+                    break;
+            }
+        }
+
+        private void SaveGame()
+        {
+            using var db = new Data.ApplicationDbContext();
+            var game = new Game
+            {
+                UserId = currentUser.UserId,
+                Score = score,
+                Duration = DateTime.Now - startTime,
+                DatePlayed = DateTime.Now
+            };
+            db.Games.Add(game);
+            db.SaveChanges();
+        }
+    }
+}
